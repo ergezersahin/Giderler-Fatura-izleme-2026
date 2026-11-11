@@ -2,15 +2,13 @@ import streamlit as st
 import datetime
 import pandas as pd
 import io
+import unicodedata
 
 # PDF Raporlama için ReportLab kütüphaneleri
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import os
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
@@ -32,31 +30,28 @@ all_banks = sorted(list(set(default_banks + existing_banks)))
 existing_types = list(set(item["type"] for item in st.session_state.expenses))
 all_types = sorted(list(set(default_types + existing_types)))
 
-# --- TÜRKÇE KARAKTER DESTEKLİ PDF FONKSİYONU ---
+# --- TÜRKÇE KARAKTER DÖNÜŞTÜRÜCÜ (PDF için %100 Garanti Çözüm) ---
+def tr_to_en(text):
+    if not isinstance(text, str):
+        return str(text)
+    # Türkçe özel harfleri güvenli karşılıklarıyla değiştir
+    tr_chars = {'ş': 's', 'Ş': 'S', 'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I', 'ö': 'o', 'Ö': 'O', 'ü': 'u', 'Ü': 'U'}
+    for k, v in tr_chars.items():
+        text = text.replace(k, v)
+    return text
+
+# --- PDF OLUŞTURMA FONKSİYONU ---
 def generate_pdf(items):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     elements = []
     
-    # Türkçe karakterler için sistem fontunu kaydet (DejaVuSans)
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    font_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('DejaVu', font_path))
-        pdfmetrics.registerFont(TTFont('DejaVu-Bold', font_bold_path))
-        base_font = 'DejaVu'
-        bold_font = 'DejaVu-Bold'
-    else:
-        base_font = 'Helvetica'
-        bold_font = 'Helvetica-Bold'
-
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle(
         'TitleStyle',
         parent=styles['Heading1'],
-        fontName=bold_font,
+        fontName='Helvetica-Bold',
         fontSize=18,
         textColor=colors.HexColor('#1f2937'),
         spaceAfter=15,
@@ -66,17 +61,17 @@ def generate_pdf(items):
     normal_style = ParagraphStyle(
         'NormalStyle',
         parent=styles['Normal'],
-        fontName=base_font,
+        fontName='Helvetica',
         fontSize=10,
         textColor=colors.HexColor('#374151')
     )
     
-    elements.append(Paragraph("Gider ve Fatura Takip Raporu", title_style))
-    elements.append(Paragraph(f"Oluşturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}", normal_style))
+    elements.append(Paragraph(tr_to_en("Gider ve Fatura Takip Raporu"), title_style))
+    elements.append(Paragraph(tr_to_en(f"Olusturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}"), normal_style))
     elements.append(Spacer(1, 15))
     
-    # Tablo Verileri
-    table_data = [["Tür / Kategori", "Banka", "Tarih", "Tutar (TL)", "Durum"]]
+    # Tablo Verileri (Türkçe karakterler güvenli dönüştürücüden geçer)
+    table_data = [[tr_to_en("Tür / Kategori"), tr_to_en("Banka"), tr_to_en("Tarih"), tr_to_en("Tutar (TL)"), tr_to_en("Durum")]]
     
     for item in items:
         try:
@@ -85,13 +80,13 @@ def generate_pdf(items):
         except:
             formatted_date = item["date"]
             
-        status = "Ödendi" if item["paid"] else "Bekliyor"
+        status = "Odendi" if item["paid"] else "Bekliyor"
         table_data.append([
-            item["type"],
-            item["bank"],
+            tr_to_en(item["type"]),
+            tr_to_en(item["bank"]),
             formatted_date,
             f"{item['amount']:,.2f} TL",
-            status
+            tr_to_en(status)
         ])
         
     t = Table(table_data, colWidths=[120, 100, 80, 100, 80])
@@ -99,12 +94,12 @@ def generate_pdf(items):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), bold_font),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9fafb')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
-        ('FONTNAME', (0, 1), (-1, -1), base_font),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
         ('TOPPADDING', (0, 1), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
