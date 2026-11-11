@@ -2,7 +2,6 @@ import streamlit as st
 import datetime
 import pandas as pd
 import io
-import unicodedata
 
 # PDF Raporlama için ReportLab kütüphaneleri
 from reportlab.lib.pagesizes import A4
@@ -34,7 +33,6 @@ all_types = sorted(list(set(default_types + existing_types)))
 def tr_to_en(text):
     if not isinstance(text, str):
         return str(text)
-    # Türkçe özel harfleri güvenli karşılıklarıyla değiştir
     tr_chars = {'ş': 's', 'Ş': 'S', 'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I', 'ö': 'o', 'Ö': 'O', 'ü': 'u', 'Ü': 'U'}
     for k, v in tr_chars.items():
         text = text.replace(k, v)
@@ -70,7 +68,6 @@ def generate_pdf(items):
     elements.append(Paragraph(tr_to_en(f"Olusturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}"), normal_style))
     elements.append(Spacer(1, 15))
     
-    # Tablo Verileri (Türkçe karakterler güvenli dönüştürücüden geçer)
     table_data = [[tr_to_en("Tür / Kategori"), tr_to_en("Banka"), tr_to_en("Tarih"), tr_to_en("Tutar (TL)"), tr_to_en("Durum")]]
     
     for item in items:
@@ -199,18 +196,18 @@ elif menu == "Yeni Ödeme Ekle":
         
         col_b, col_t = st.columns(2)
         with col_b:
-            bank_input_type = st.radio("Banka Giriş Yöntemi", ["Listeden Seç", "Yeni Yaz"], horizontal=True)
-            if bank_input_type == "Listeden Seç":
-                bank_val = st.selectbox("Banka Seçin", all_banks)
-            else:
+            bank_selection = st.selectbox("Banka / Kurum Seçin", all_banks + ["+ Yeni Banka Ekle..."])
+            if bank_selection == "+ Yeni Banka Ekle...":
                 bank_val = st.text_input("Yeni Banka Adını Yazın")
+            else:
+                bank_val = bank_selection
                 
         with col_t:
-            type_input_type = st.radio("Kategori Giriş Yöntemi", ["Listeden Seç", "Yeni Yaz"], horizontal=True, key="type_radio")
-            if type_input_type == "Listeden Seç":
-                type_val = st.selectbox("Kategori Seçin", all_types)
-            else:
+            type_selection = st.selectbox("Ödeme Türü / Kategori Seçin", all_types + ["+ Yeni Kategori Ekle..."])
+            if type_selection == "+ Yeni Kategori Ekle...":
                 type_val = st.text_input("Yeni Kategori Adını Yazın")
+            else:
+                type_val = type_selection
                 
         amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0)
         paid_val = st.checkbox("Ödendi olarak işaretle")
