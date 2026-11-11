@@ -29,7 +29,7 @@ all_banks = sorted(list(set(default_banks + existing_banks)))
 existing_types = list(set(item["type"] for item in st.session_state.expenses))
 all_types = sorted(list(set(default_types + existing_types)))
 
-# --- TÜRKÇE KARAKTER DÖNÜŞTÜRÜCÜ (PDF için %100 Garanti Çözüm) ---
+# --- TÜRKÇE KARAKTER DÖNÜŞTÜRÜCÜ (PDF için) ---
 def tr_to_en(text):
     if not isinstance(text, str):
         return str(text)
@@ -191,43 +191,40 @@ if menu == "Ana Panel":
 elif menu == "Yeni Ödeme Ekle":
     st.title("➕ Yeni Ödeme Kaydı")
     
-    with st.form("add_form"):
-        date_val = st.date_input("Ödeme Tarihi", datetime.date.today())
+    date_val = st.date_input("Ödeme Tarihi", datetime.date.today())
+    
+    col_b, col_t = st.columns(2)
+    
+    with col_b:
+        st.markdown("##### Banka Seçimi")
+        bank_choice = st.selectbox("Listeden Seçin", all_banks, key="bank_select")
+        custom_bank = st.text_input("Veya Yeni Banka Yazın (İsteğe bağlı)", placeholder="Örn: QNB, Fibabanka")
         
-        col_b, col_t = st.columns(2)
-        with col_b:
-            bank_selection = st.selectbox("Banka / Kurum Seçin", all_banks + ["+ Yeni Banka Ekle..."])
-            if bank_selection == "+ Yeni Banka Ekle...":
-                bank_val = st.text_input("Yeni Banka Adını Yazın")
-            else:
-                bank_val = bank_selection
-                
-        with col_t:
-            type_selection = st.selectbox("Ödeme Türü / Kategori Seçin", all_types + ["+ Yeni Kategori Ekle..."])
-            if type_selection == "+ Yeni Kategori Ekle...":
-                type_val = st.text_input("Yeni Kategori Adını Yazın")
-            else:
-                type_val = type_selection
-                
-        amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0)
-        paid_val = st.checkbox("Ödendi olarak işaretle")
-        note_val = st.text_area("Not (Opsiyonel)")
+    with col_t:
+        st.markdown("##### Kategori Seçimi")
+        type_choice = st.selectbox("Listeden Seçin", all_types, key="type_select")
+        custom_type = st.text_input("Veya Yeni Kategori Yazın (İsteğe bağlı)", placeholder="Örn: Vergi, Aidat")
         
-        if st.form_submit_button("Ödemeyi Kaydet"):
-            final_bank = bank_val.strip() if bank_val else ""
-            final_type = type_val.strip() if type_val else ""
-            
-            if final_bank and final_type and amount_val > 0:
-                new_item = {
-                    "id": str(datetime.datetime.now().timestamp()),
-                    "date": str(date_val),
-                    "bank": final_bank,
-                    "type": final_type,
-                    "amount": amount_val,
-                    "paid": paid_val,
-                    "note": note_val.strip()
-                }
-                st.session_state.expenses.append(new_item)
-                st.success("Ödeme başarıyla eklendi! Sol menüden 'Ana Panel'e dönebilirsiniz.")
-            else:
-                st.error("Lütfen banka, tür ve tutar alanlarını eksiksiz doldurun.")
+    amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0)
+    paid_val = st.checkbox("Ödendi olarak işaretle")
+    note_val = st.text_area("Not (Opsiyonel)")
+    
+    if st.button("Ödemeyi Kaydet", type="primary", use_container_width=True):
+        # Eğer kullanıcı alt kutuya yeni yazı yazdıysa önceliği ona ver, yazmadıysa listeden seçileni al
+        final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
+        final_type = custom_type.strip() if custom_type.strip() else type_choice
+        
+        if final_bank and final_type and amount_val > 0:
+            new_item = {
+                "id": str(datetime.datetime.now().timestamp()),
+                "date": str(date_val),
+                "bank": final_bank,
+                "type": final_type,
+                "amount": amount_val,
+                "paid": paid_val,
+                "note": note_val.strip()
+            }
+            st.session_state.expenses.append(new_item)
+            st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
+        else:
+            st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
