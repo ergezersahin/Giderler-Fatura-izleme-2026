@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+import pandas as pd
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
@@ -35,7 +36,23 @@ if menu == "Ana Panel":
     col2.metric("Ödenen Toplam", f"{total_paid:,.2f} TL")
     
     st.divider()
-    st.subheader("📋 Ödeme Listesi")
+    
+    # --- ÜST BAŞLIK VE ÇIKTI / İNDİRME BUTONLARI ---
+    col_h1, col_h2 = st.columns([0.7, 0.3])
+    with col_h1:
+        st.subheader("📋 Ödeme Listesi")
+    with col_h2:
+        if st.session_state.expenses:
+            # Excel / CSV olarak indirme hazırlığı
+            df_export = pd.DataFrame(st.session_state.expenses)
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Excel / CSV İndir",
+                data=csv_data,
+                file_name=f"giderler_{datetime.date.today()}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
     
     # --- FİLTRELER ---
     col_f1, col_f2, col_f3 = st.columns(3)
@@ -47,9 +64,8 @@ if menu == "Ana Panel":
     with col_f3:
         search_query = st.text_input("🔍 Notlarda ara...").lower()
     
-    updated = False
-    filtered_count = 0
-    
+    # Filtrelenmiş liste
+    filtered_items = []
     for item in st.session_state.expenses:
         if selected_bank_filter != "Tümü" and item["bank"] != selected_bank_filter:
             continue
@@ -57,38 +73,43 @@ if menu == "Ana Panel":
             continue
         if search_query and not search_query in item.get("note", "").lower():
             continue
-            
-        filtered_count += 1
-        cols = st.columns([0.1, 0.4, 0.2, 0.2, 0.1])
-        new_paid = cols[0].checkbox("", value=item["paid"], key=f"paid_{item['id']}")
-        if new_paid != item["paid"]:
-            item["paid"] = new_paid
-            updated = True
-            
-        # Listede Gün/Ay/Yıl (GG/AA/YYYY) olarak gösterim
-        try:
-            date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
-            formatted_date = date_obj.strftime("%d/%m/%Y")
-        except:
-            formatted_date = item["date"]
-            
-        cols[1].markdown(f"**{item['type']}**\n\n`{item['bank']}` • `{formatted_date}`")
-        cols[2].markdown(f"**{item['amount']:,.2f} TL**")
+        filtered_items.append(item)
         
-        if item["paid"]:
-            cols[3].success("Ödendi")
-        else:
-            cols[3].warning("Bekliyor")
-            
-        if cols[4].button("🗑️", key=f"del_{item['id']}"):
-            st.session_state.expenses = [e for e in st.session_state.expenses if e["id"] != item["id"]]
-            st.rerun()
-            
-    if filtered_count == 0:
+    if not filtered_items:
         st.info("Seçilen kriterlere uygun ödeme bulunamadı.")
+    else:
+        # Tablo Görünümü ve Yönetimi için Kompakt Satırlar
+        for item in filtered_items:
+            # Tarihi GG/AA/YYYY formatına çevir
+            try:
+                date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
+                formatted_date = date_obj.strftime("%d/%m/%Y")
+            except:
+                formatted_date = item["date"]
+                
+            status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
             
-    if updated:
-        st.rerun()
+            # Her satırı şık bir container içinde tablo sütunları gibi hizalayalım
+            with st.container(border=True):
+                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.1, 0.25, 0.2, 0.15, 0.15, 0.15])
+                
+                # Ödendi Checkbox'ı
+                new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
+                if new_paid != item["paid"]:
+                    item["paid"] = new_paid
+                    st.rerun()
+                    
+                r_col2.markdown(f"**{item['type']}**\n\n`{item['bank']}`")
+                r_col3.markdown(f"📅 **{formatted_date}**")
+                r_col4.markdown(f"💰 **{item['amount']:,.2f} TL**")
+                r_col5.markdown(f"*{status_text}*")
+                
+                if r_col6.button("🗑️ Sil", key=f"del_{item['id']}", use_container_width=True):
+                    st.session_state.expenses = [e for e in st.session_state.expenses if e["id"] != item["id"]]
+                    st.rerun()
+                
+                if item.get("note"):
+                    st.caption(f"📝 Not: {item['note']}")
 
 elif menu == "Yeni Ödeme Ekle":
     st.title("➕ Yeni Ödeme Kaydı")
@@ -98,7 +119,6 @@ elif menu == "Yeni Ödeme Ekle":
         
         col_b, col_t = st.columns(2)
         with col_b:
-            # Banka seçimi veya direkt metin girişi
             bank_input_type = st.radio("Banka Giriş Yöntemi", ["Listeden Seç", "Yeni Yaz"], horizontal=True)
             if bank_input_type == "Listeden Seç":
                 bank_val = st.selectbox("Banka Seçin", all_banks)
@@ -106,7 +126,6 @@ elif menu == "Yeni Ödeme Ekle":
                 bank_val = st.text_input("Yeni Banka Adını Yazın")
                 
         with col_t:
-            # Kategori seçimi veya direkt metin girişi
             type_input_type = st.radio("Kategori Giriş Yöntemi", ["Listeden Seç", "Yeni Yaz"], horizontal=True, key="type_radio")
             if type_input_type == "Listeden Seç":
                 type_val = st.selectbox("Kategori Seçin", all_types)
