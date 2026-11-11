@@ -19,15 +19,22 @@ if "expenses" not in st.session_state:
         {"id": "3", "date": "2026-11-10", "bank": "İş Bankası", "type": "Su", "amount": 320.0, "paid": False, "note": "Fatura"}
     ]
 
+# Özel silinen/çıkarılan banka ve kategorileri takip etmek için session_state listeleri
+if "deleted_banks" not in st.session_state:
+    st.session_state.deleted_banks = []
+if "deleted_types" not in st.session_state:
+    st.session_state.deleted_types = []
+
 # Varsayılan banka ve kategori listeleri
 default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "Enpara", "Nakit", "Diğer"]
 default_types = ["Kredi Kartı", "Elektrik", "Su", "Doğalgaz", "İnternet", "Kira", "Telefon", "Market", "Diğer"]
 
+# Mevcut kayıtlı banka ve türleri birleştir ve silinenleri hariç tut
 existing_banks = list(set(item["bank"] for item in st.session_state.expenses))
-all_banks = sorted(list(set(default_banks + existing_banks)))
+all_banks = sorted(list(set([b for b in (default_banks + existing_banks) if b not in st.session_state.deleted_banks])))
 
 existing_types = list(set(item["type"] for item in st.session_state.expenses))
-all_types = sorted(list(set(default_types + existing_types)))
+all_types = sorted(list(set([t for t in (default_types + existing_types) if t not in st.session_state.deleted_types])))
 
 # --- TÜRKÇE KARAKTER DÖNÜŞTÜRÜCÜ (PDF için) ---
 def tr_to_en(text):
@@ -109,7 +116,7 @@ def generate_pdf(items):
 
 
 st.sidebar.title("📌 Menü")
-menu = st.sidebar.selectbox("Sayfa Seçin", ["Ana Panel", "Yeni Ödeme Ekle"])
+menu = st.sidebar.selectbox("Sayfa Seçin", ["Ana Panel", "Yeni Ödeme Ekle", "Tanımları Yönet"])
 
 if menu == "Ana Panel":
     st.title("💰 Gider ve Fatura Takipçisi")
@@ -210,7 +217,6 @@ elif menu == "Yeni Ödeme Ekle":
     note_val = st.text_area("Not (Opsiyonel)")
     
     if st.button("Ödemeyi Kaydet", type="primary", use_container_width=True):
-        # Eğer kullanıcı alt kutuya yeni yazı yazdıysa önceliği ona ver, yazmadıysa listeden seçileni al
         final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
         final_type = custom_type.strip() if custom_type.strip() else type_choice
         
@@ -228,3 +234,31 @@ elif menu == "Yeni Ödeme Ekle":
             st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
         else:
             st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
+
+elif menu == "Tanımları Yönet":
+    st.title("⚙️ Banka ve Kategori Yönetimi")
+    st.write("Listelerde görünmesini istemediğiniz banka veya kategorileri buradan silebilirsiniz.")
+    
+    col_m1, col_m2 = st.columns(2)
+    
+    with col_m1:
+        st.subheader("🏦 Bankalar")
+        for b in all_banks:
+            rc1, rc2 = st.columns([0.7, 0.3])
+            rc1.markdown(f"- {b}")
+            if rc2.button("Kaldır", key=f"del_bank_{b}", use_container_width=True):
+                if b not in st.session_state.deleted_banks:
+                    st.session_state.deleted_banks.append(b)
+                    st.success(f"'{b}' bankası listeden kaldırıldı.")
+                    st.rerun()
+                    
+    with col_m2:
+        st.subheader("📂 Kategoriler")
+        for t in all_types:
+            tc1, tc2 = st.columns([0.7, 0.3])
+            tc1.markdown(f"- {t}")
+            if tc2.button("Kaldır", key=f"del_type_{t}", use_container_width=True):
+                if t not in st.session_state.deleted_types:
+                    st.session_state.deleted_types.append(t)
+                    st.success(f"'{t}' kategorisi listeden kaldırıldı.")
+                    st.rerun()
