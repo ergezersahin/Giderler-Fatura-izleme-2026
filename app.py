@@ -1,6 +1,13 @@
 import streamlit as st
 import datetime
 import pandas as pd
+import io
+
+# PDF Raporlama için ReportLab kütüphaneleri
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
@@ -22,6 +29,71 @@ all_banks = sorted(list(set(default_banks + existing_banks)))
 existing_types = list(set(item["type"] for item in st.session_state.expenses))
 all_types = sorted(list(set(default_types + existing_types)))
 
+# --- PDF OLUŞTURMA FONKSİYONU ---
+def generate_pdf(items):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    
+    # Başlık Stili
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=15,
+        alignment=1 # Ortalanmış
+    )
+    
+    elements.append(Paragraph("Gider ve Fatura Takip Raporu", title_style))
+    elements.append(Paragraph(f"Oluşturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}", styles['Normal']))
+    elements.append(Spacer(1, 15))
+    
+    # Tablo Verilerini Hazırla
+    table_data = [["Tür / Kategori", "Banka", "Tarih", "Tutar (TL)", "Durum"]]
+    
+    for item in items:
+        try:
+            date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%d/%m/%Y")
+        except:
+            formatted_date = item["date"]
+            
+        status = "Ödendi" if item["paid"] else "Bekliyor"
+        table_data.append([
+            item["type"],
+            item["bank"],
+            formatted_date,
+            f"{item['amount']:,.2f} TL",
+            status
+        ])
+        
+    # Tablo Tasarımı
+    t = Table(table_data, colWidths=[120, 100, 80, 100, 80])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9fafb')),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+    ]))
+    
+    elements.append(t)
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 st.sidebar.title("📌 Menü")
 menu = st.sidebar.selectbox("Sayfa Seçin", ["Ana Panel", "Yeni Ödeme Ekle"])
 
@@ -37,20 +109,18 @@ if menu == "Ana Panel":
     
     st.divider()
     
-    # --- ÜST BAŞLIK VE ÇIKTI / İNDİRME BUTONLARI ---
-    col_h1, col_h2 = st.columns([0.7, 0.3])
+    # --- ÜST BAŞLIK VE PDF İNDİRME BUTONU ---
+    col_h1, col_h2 = st.columns([0.6, 0.4])
     with col_h1:
         st.subheader("📋 Ödeme Listesi")
     with col_h2:
         if st.session_state.expenses:
-            # Excel / CSV olarak indirme hazırlığı
-            df_export = pd.DataFrame(st.session_state.expenses)
-            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            pdf_bytes = generate_pdf(st.session_state.expenses)
             st.download_button(
-                label="📥 Excel / CSV İndir",
-                data=csv_data,
-                file_name=f"giderler_{datetime.date.today()}.csv",
-                mime="text/csv",
+                label="📄 PDF Raporu İndir",
+                data=pdf_bytes,
+                file_name=f"gider_raporu_{datetime.date.today()}.pdf",
+                mime="application/pdf",
                 use_container_width=True
             )
     
@@ -78,9 +148,8 @@ if menu == "Ana Panel":
     if not filtered_items:
         st.info("Seçilen kriterlere uygun ödeme bulunamadı.")
     else:
-        # Tablo Görünümü ve Yönetimi için Kompakt Satırlar
+        # Kompakt Tablo Görünümü
         for item in filtered_items:
-            # Tarihi GG/AA/YYYY formatına çevir
             try:
                 date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
                 formatted_date = date_obj.strftime("%d/%m/%Y")
@@ -89,11 +158,9 @@ if menu == "Ana Panel":
                 
             status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
             
-            # Her satırı şık bir container içinde tablo sütunları gibi hizalayalım
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.1, 0.25, 0.2, 0.15, 0.15, 0.15])
                 
-                # Ödendi Checkbox'ı
                 new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
                     item["paid"] = new_paid
