@@ -1,9 +1,9 @@
 import streamlit as st
 import datetime
 
-st.set_page_config(page_title="Gider dan Fatura Takipçisi", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
-# Oturum verilerini başlat (Tarihler YYYY-MM-DD formatında saklanır, gösterimde gün/ay/yıl yapılır)
+# Oturum verilerini başlat
 if "expenses" not in st.session_state:
     st.session_state.expenses = [
         {"id": "1", "date": "2026-11-01", "bank": "Garanti", "type": "Kredi Kartı", "amount": 4500.0, "paid": False, "note": "Kasım ekstresi"},
@@ -11,7 +11,7 @@ if "expenses" not in st.session_state:
         {"id": "3", "date": "2026-11-10", "bank": "İş Bankası", "type": "Su", "amount": 320.0, "paid": False, "note": "Fatura"}
     ]
 
-# Varsayılan banka ve kategoriler
+# Varsayılan banka ve kategori listeleri
 default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "Enpara", "Nakit", "Diğer"]
 default_types = ["Kredi Kartı", "Elektrik", "Su", "Doğalgaz", "İnternet", "Kira", "Telefon", "Market", "Diğer"]
 
@@ -65,7 +65,7 @@ if menu == "Ana Panel":
             item["paid"] = new_paid
             updated = True
             
-        # Tarihi YYYY-MM-DD formatından GG/AA/YYYY formatına çevirerek göster
+        # Listede Gün/Ay/Yıl (GG/AA/YYYY) olarak gösterim
         try:
             date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
             formatted_date = date_obj.strftime("%d/%m/%Y")
@@ -98,18 +98,20 @@ elif menu == "Yeni Ödeme Ekle":
         
         col_b, col_t = st.columns(2)
         with col_b:
-            bank_choice = st.selectbox("Banka / Kurum Seç", all_banks + ["+ Diğer (Yeni Yaz)"])
-            if bank_choice == "+ Diğer (Yeni Yaz)":
-                bank_val = st.text_input("Yeni Banka / Kurum Adını Girin")
+            # Banka seçimi veya direkt metin girişi
+            bank_input_type = st.radio("Banka Giriş Yöntemi", ["Listeden Seç", "Yeni Yaz"], horizontal=True)
+            if bank_input_type == "Listeden Seç":
+                bank_val = st.selectbox("Banka Seçin", all_banks)
             else:
-                bank_val = bank_choice
+                bank_val = st.text_input("Yeni Banka Adını Yazın")
                 
         with col_t:
-            type_choice = st.selectbox("Ödeme Türü / Kategori Seç", all_types + ["+ Diğer (Yeni Yaz)"])
-            if type_choice == "+ Diğer (Yeni Yaz)":
-                type_val = st.text_input("Yeni Ödeme Türünü Girin")
+            # Kategori seçimi veya direkt metin girişi
+            type_input_type = st.radio("Kategori Giriş Yöntemi", ["Listeden Seç", "Yeni Yaz"], horizontal=True, key="type_radio")
+            if type_input_type == "Listeden Seç":
+                type_val = st.selectbox("Kategori Seçin", all_types)
             else:
-                type_val = type_choice
+                type_val = st.text_input("Yeni Kategori Adını Yazın")
                 
         amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0)
         paid_val = st.checkbox("Ödendi olarak işaretle")
