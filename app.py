@@ -1,9 +1,9 @@
 import streamlit as st
 import datetime
 
-st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Gider dan Fatura Takipçisi", page_icon="💰", layout="wide")
 
-# Oturum verilerini başlat
+# Oturum verilerini başlat (Tarihler YYYY-MM-DD formatında saklanır, gösterimde gün/ay/yıl yapılır)
 if "expenses" not in st.session_state:
     st.session_state.expenses = [
         {"id": "1", "date": "2026-11-01", "bank": "Garanti", "type": "Kredi Kartı", "amount": 4500.0, "paid": False, "note": "Kasım ekstresi"},
@@ -11,11 +11,10 @@ if "expenses" not in st.session_state:
         {"id": "3", "date": "2026-11-10", "bank": "İş Bankası", "type": "Su", "amount": 320.0, "paid": False, "note": "Fatura"}
     ]
 
-# Varsayılan veya kayıtlı verilerden dinamik liste oluşturma
+# Varsayılan banka ve kategoriler
 default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "Enpara", "Nakit", "Diğer"]
 default_types = ["Kredi Kartı", "Elektrik", "Su", "Doğalgaz", "İnternet", "Kira", "Telefon", "Market", "Diğer"]
 
-# Mevcut kayıtlı özel banka/türleri de listeye dahil et
 existing_banks = list(set(item["bank"] for item in st.session_state.expenses))
 all_banks = sorted(list(set(default_banks + existing_banks)))
 
@@ -52,7 +51,6 @@ if menu == "Ana Panel":
     filtered_count = 0
     
     for item in st.session_state.expenses:
-        # Filtreleme mantığı
         if selected_bank_filter != "Tümü" and item["bank"] != selected_bank_filter:
             continue
         if selected_type_filter != "Tümü" and item["type"] != selected_type_filter:
@@ -67,7 +65,14 @@ if menu == "Ana Panel":
             item["paid"] = new_paid
             updated = True
             
-        cols[1].markdown(f"**{item['type']}**\n\n`{item['bank']}` • `{item['date']}`")
+        # Tarihi YYYY-MM-DD formatından GG/AA/YYYY formatına çevirerek göster
+        try:
+            date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%d/%m/%Y")
+        except:
+            formatted_date = item["date"]
+            
+        cols[1].markdown(f"**{item['type']}**\n\n`{item['bank']}` • `{formatted_date}`")
         cols[2].markdown(f"**{item['amount']:,.2f} TL**")
         
         if item["paid"]:
@@ -91,7 +96,6 @@ elif menu == "Yeni Ödeme Ekle":
     with st.form("add_form"):
         date_val = st.date_input("Ödeme Tarihi", datetime.date.today())
         
-        # Seçmeli veya yeni eklenebilir yapı için text_input + selectbox kombinasyonu
         col_b, col_t = st.columns(2)
         with col_b:
             bank_choice = st.selectbox("Banka / Kurum Seç", all_banks + ["+ Diğer (Yeni Yaz)"])
