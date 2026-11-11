@@ -8,6 +8,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import os
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
@@ -29,30 +32,50 @@ all_banks = sorted(list(set(default_banks + existing_banks)))
 existing_types = list(set(item["type"] for item in st.session_state.expenses))
 all_types = sorted(list(set(default_types + existing_types)))
 
-# --- PDF OLUŞTURMA FONKSİYONU ---
+# --- TÜRKÇE KARAKTER DESTEKLİ PDF FONKSİYONU ---
 def generate_pdf(items):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     elements = []
     
+    # Türkçe karakterler için sistem fontunu kaydet (DejaVuSans)
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    font_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont('DejaVu', font_path))
+        pdfmetrics.registerFont(TTFont('DejaVu-Bold', font_bold_path))
+        base_font = 'DejaVu'
+        bold_font = 'DejaVu-Bold'
+    else:
+        base_font = 'Helvetica'
+        bold_font = 'Helvetica-Bold'
+
     styles = getSampleStyleSheet()
     
-    # Başlık Stili
     title_style = ParagraphStyle(
         'TitleStyle',
         parent=styles['Heading1'],
-        fontName='Helvetica-Bold',
+        fontName=bold_font,
         fontSize=18,
         textColor=colors.HexColor('#1f2937'),
         spaceAfter=15,
-        alignment=1 # Ortalanmış
+        alignment=1
+    )
+    
+    normal_style = ParagraphStyle(
+        'NormalStyle',
+        parent=styles['Normal'],
+        fontName=base_font,
+        fontSize=10,
+        textColor=colors.HexColor('#374151')
     )
     
     elements.append(Paragraph("Gider ve Fatura Takip Raporu", title_style))
-    elements.append(Paragraph(f"Oluşturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}", styles['Normal']))
+    elements.append(Paragraph(f"Oluşturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}", normal_style))
     elements.append(Spacer(1, 15))
     
-    # Tablo Verilerini Hazırla
+    # Tablo Verileri
     table_data = [["Tür / Kategori", "Banka", "Tarih", "Tutar (TL)", "Durum"]]
     
     for item in items:
@@ -71,18 +94,17 @@ def generate_pdf(items):
             status
         ])
         
-    # Tablo Tasarımı
     t = Table(table_data, colWidths=[120, 100, 80, 100, 80])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 0), (-1, 0), bold_font),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9fafb')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 1), (-1, -1), base_font),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
         ('TOPPADDING', (0, 1), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
@@ -109,7 +131,6 @@ if menu == "Ana Panel":
     
     st.divider()
     
-    # --- ÜST BAŞLIK VE PDF İNDİRME BUTONU ---
     col_h1, col_h2 = st.columns([0.6, 0.4])
     with col_h1:
         st.subheader("📋 Ödeme Listesi")
@@ -124,7 +145,6 @@ if menu == "Ana Panel":
                 use_container_width=True
             )
     
-    # --- FİLTRELER ---
     col_f1, col_f2, col_f3 = st.columns(3)
     
     with col_f1:
@@ -134,7 +154,6 @@ if menu == "Ana Panel":
     with col_f3:
         search_query = st.text_input("🔍 Notlarda ara...").lower()
     
-    # Filtrelenmiş liste
     filtered_items = []
     for item in st.session_state.expenses:
         if selected_bank_filter != "Tümü" and item["bank"] != selected_bank_filter:
@@ -148,7 +167,6 @@ if menu == "Ana Panel":
     if not filtered_items:
         st.info("Seçilen kriterlere uygun ödeme bulunamadı.")
     else:
-        # Kompakt Tablo Görünümü
         for item in filtered_items:
             try:
                 date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
