@@ -13,7 +13,7 @@ from reportlab.lib import colors
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
-# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM VE RENKLİ KARTLAR ---
+# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM VE RENKLİ ROZETLER ---
 st.markdown("""
     <style>
         div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] {
@@ -205,17 +205,17 @@ if menu == "Ana Panel":
                 date_obj = today_date
                 formatted_date = item["date"]
                 
-            # --- VADE DURUM KONTROLÜ ---
+            # --- RENKLİ HTML ROZETLER ---
             is_paid = item["paid"]
             if not is_paid:
                 if date_obj < today_date:
-                    status_badge = "🔴 VADESİ GEÇTİ"
+                    status_badge = "<span style='color: white; background-color: #dc2626; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>🔴 VADESİ GEÇTİ</span>"
                 elif date_obj == today_date:
-                    status_badge = "🟠 BUGÜN ÖDENECEK"
+                    status_badge = "<span style='color: white; background-color: #ea580c; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>🟠 BUGÜN ÖDENECEK</span>"
                 else:
-                    status_badge = "⏳ Bekliyor"
+                    status_badge = "<span style='color: #4b5563; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-size: 12px;'>⏳ Bekliyor</span>"
             else:
-                status_badge = "Ödendi ✅"
+                status_badge = "<span style='color: white; background-color: #16a34a; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>Ödendi ✅</span>"
             
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
@@ -229,7 +229,7 @@ if menu == "Ana Panel":
                 r_col2.markdown(f"**{item['type']}** <span style='color:gray; font-size:12px;'>({item['bank']})</span>", unsafe_allow_html=True)
                 r_col3.markdown(f"📅 {formatted_date}")
                 r_col4.markdown(f"💰 **{item['amount']:,.2f} TL**")
-                r_col5.markdown(f"*{status_badge}*")
+                r_col5.markdown(status_badge, unsafe_allow_html=True)
                 
                 edit_key = f"edit_mode_{item['id']}"
                 if edit_key not in st.session_state:
