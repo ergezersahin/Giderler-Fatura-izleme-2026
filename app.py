@@ -91,13 +91,12 @@ def generate_pdf(items):
         textColor=colors.HexColor('#374151')
     )
     
-    elements.append(Paragraph(tr_to_en("Gider dan Fatura Takip Raporu"), title_style))
+    elements.append(Paragraph(tr_to_en("Gider ve Fatura Takip Raporu"), title_style))
     elements.append(Paragraph(tr_to_en(f"Olusturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}"), normal_style))
     elements.append(Spacer(1, 15))
     
     table_data = [[tr_to_en("Tür / Kategori"), tr_to_en("Ödeme Şekli"), tr_to_en("Tarih"), tr_to_en("Tutar (TL)"), tr_to_en("Durum")]]
     
-    # PDF raporunda da tarih sıralı çıkması için sıralama uygulandı
     sorted_items_for_pdf = sorted(items, key=lambda x: x.get("date", ""))
     
     for item in sorted_items_for_pdf:
@@ -148,7 +147,7 @@ st.sidebar.markdown(
 )
 
 if menu == "Ana Panel":
-    st.title("💰 Gider dan Fatura Takipçisi")
+    st.title("💰 Gider ve Fatura Takipçisi")
     
     total_pending = sum(item["amount"] for item in st.session_state.expenses if not item["paid"])
     total_paid = sum(item["amount"] for item in st.session_state.expenses if item["paid"])
@@ -182,7 +181,6 @@ if menu == "Ana Panel":
     with col_f3:
         search_query = st.text_input("🔍 Notlarda ara...").lower()
     
-    # --- TARİHE GÖRE OTOMATİK SIRALAMA (Eskiden Yeniye) ---
     sorted_expenses = sorted(st.session_state.expenses, key=lambda x: x.get("date", ""))
     
     filtered_items = []
