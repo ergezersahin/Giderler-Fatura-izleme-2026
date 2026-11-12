@@ -91,13 +91,16 @@ def generate_pdf(items):
         textColor=colors.HexColor('#374151')
     )
     
-    elements.append(Paragraph(tr_to_en("Gider ve Fatura Takip Raporu"), title_style))
+    elements.append(Paragraph(tr_to_en("Gider dan Fatura Takip Raporu"), title_style))
     elements.append(Paragraph(tr_to_en(f"Olusturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}"), normal_style))
     elements.append(Spacer(1, 15))
     
     table_data = [[tr_to_en("Tür / Kategori"), tr_to_en("Ödeme Şekli"), tr_to_en("Tarih"), tr_to_en("Tutar (TL)"), tr_to_en("Durum")]]
     
-    for item in items:
+    # PDF raporunda da tarih sıralı çıkması için sıralama uygulandı
+    sorted_items_for_pdf = sorted(items, key=lambda x: x.get("date", ""))
+    
+    for item in sorted_items_for_pdf:
         try:
             date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
             formatted_date = date_obj.strftime("%d/%m/%Y")
@@ -145,7 +148,7 @@ st.sidebar.markdown(
 )
 
 if menu == "Ana Panel":
-    st.title("💰 Gider ve Fatura Takipçisi")
+    st.title("💰 Gider dan Fatura Takipçisi")
     
     total_pending = sum(item["amount"] for item in st.session_state.expenses if not item["paid"])
     total_paid = sum(item["amount"] for item in st.session_state.expenses if item["paid"])
@@ -179,8 +182,11 @@ if menu == "Ana Panel":
     with col_f3:
         search_query = st.text_input("🔍 Notlarda ara...").lower()
     
+    # --- TARİHE GÖRE OTOMATİK SIRALAMA (Eskiden Yeniye) ---
+    sorted_expenses = sorted(st.session_state.expenses, key=lambda x: x.get("date", ""))
+    
     filtered_items = []
-    for item in st.session_state.expenses:
+    for item in sorted_expenses:
         if selected_bank_filter != "Tümü" and item["bank"] != selected_bank_filter:
             continue
         if selected_type_filter != "Tümü" and item["type"] != selected_type_filter:
@@ -282,7 +288,6 @@ elif menu == "Yeni Ödeme Ekle":
             type_choice = st.selectbox("Listeden Seçin", all_types, key="type_select")
             custom_type = st.text_input("Veya Yeni Kategori Yazın (İsteğe bağlı)", placeholder="Örn: Vergi, Aidat", key="custom_type_input")
             
-        # Tutar alanı için text_input kullanılarak doğrudan tıklayıp yazma esnekliği sağlandı
         amount_str = st.text_input("Tutar (TL)", value="", placeholder="Örn: 1250.50", key="amount_input")
         
         paid_val = st.checkbox("Ödendi olarak işaretle", key="paid_input")
@@ -294,7 +299,6 @@ elif menu == "Yeni Ödeme Ekle":
             final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
             final_type = custom_type.strip() if custom_type.strip() else type_choice
             
-            # Girilen tutar metnini güvenli bir şekilde sayıya dönüştür
             try:
                 clean_amount = float(amount_str.replace(" ", "").replace("TL", "").replace(".", "").replace(",", ".")) if amount_str else 0.0
             except:
