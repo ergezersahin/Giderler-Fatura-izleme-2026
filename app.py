@@ -106,7 +106,7 @@ def generate_pdf(items):
         except:
             formatted_date = item["date"]
             
-        status = "Odendi" if item["paid"] else "Bekliyor"
+        status = "ÖDENDİ" if item["paid"] else "Bekliyor"
         table_data.append([
             tr_to_en(item["type"]),
             tr_to_en(item["bank"]),
@@ -215,12 +215,12 @@ if menu == "Ana Panel":
                 else:
                     status_badge = "<span style='color: #4b5563; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-size: 12px;'>⏳ Bekliyor</span>"
             else:
-                status_badge = "<span style='color: white; background-color: #16a34a; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>Ödendi ✅</span>"
+                status_badge = "<span style='color: white; background-color: #16a34a; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>ÖDENDİ ✅</span>"
             
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
                 
-                new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
+                new_paid = r_col1.checkbox("ÖDENDİ", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
                     item["paid"] = new_paid
                     save_expenses(st.session_state.expenses)
@@ -300,7 +300,7 @@ elif menu == "Yeni Ödeme Ekle":
             
         amount_str = st.text_input("Tutar (TL)", value="", placeholder="Örn: 1250.50", key="amount_input")
         
-        paid_val = st.checkbox("Ödendi olarak işaretle", key="paid_input")
+        paid_val = st.checkbox("ÖDENDİ olarak işaretle", key="paid_input")
         note_val = st.text_area("Not (Opsiyonel)", key="note_input")
         
         submitted = st.form_submit_button("Ödemeyi Kaydet", type="primary", use_container_width=True)
