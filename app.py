@@ -106,7 +106,7 @@ def generate_pdf(items):
         except:
             formatted_date = item["date"]
             
-        status = "Odendi" if item["paid"] else "Bekliyor"
+        status = "ODENDİ" if item["paid"] else "Bekliyor"
         table_data.append([
             tr_to_en(item["type"]),
             tr_to_en(item["bank"]),
