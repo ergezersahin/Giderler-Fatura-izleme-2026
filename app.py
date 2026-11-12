@@ -13,11 +13,7 @@ st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", la
 
 # Oturum verilerini başlat
 if "expenses" not in st.session_state:
-    st.session_state.expenses = [
-        {"id": "1", "date": "2026-11-01", "bank": "Garanti", "type": "Kredi Kartı", "amount": 4500.0, "paid": False, "note": "Kasım ekstresi"},
-        {"id": "2", "date": "2026-11-05", "bank": "Ziraat", "type": "Elektrik", "amount": 650.0, "paid": True, "note": "Otomatik ödeme"},
-        {"id": "3", "date": "2026-11-10", "bank": "İş Bankası", "type": "Su", "amount": 320.0, "paid": False, "note": "Fatura"}
-    ]
+    st.session_state.expenses = []
 
 # Özel silinen/çıkarılan banka ve kategorileri takip etmek için session_state listeleri
 if "deleted_banks" not in st.session_state:
@@ -26,8 +22,8 @@ if "deleted_types" not in st.session_state:
     st.session_state.deleted_types = []
 
 # Varsayılan banka ve kategori listeleri
-default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "Enpara", "Nakit", "Diğer"]
-default_types = ["Kredi Kartı", "Elektrik", "Su", "Doğalgaz", "İnternet", "Kira", "Telefon", "Market", "Diğer"]
+default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "TEB", "Nakit", "Diğer"]
+default_types = ["Kredi Kartı Ödemesi", "Bina / Site Aidatı", "Elektrik Bedeli", "Su Bedeli", "Doğalgaz Bedeli", "İnternet/TV Bedeli", "Kira Gelir Vergisi", "Motorlu Taşıt Vergisi","Emlak Vergisi", "Apt. Temizlik Bedeli", "Diğer"]
 
 # Mevcut kayıtlı banka ve türleri birleştir ve silinenleri hariç tut
 existing_banks = list(set(item["bank"] for item in st.session_state.expenses))
@@ -75,7 +71,7 @@ def generate_pdf(items):
     elements.append(Paragraph(tr_to_en(f"Olusturulma Tarihi: {datetime.date.today().strftime('%d/%m/%Y')}"), normal_style))
     elements.append(Spacer(1, 15))
     
-    table_data = [[tr_to_en("Tür / Kategori"), tr_to_en("Banka"), tr_to_en("Tarih"), tr_to_en("Tutar (TL)"), tr_to_en("Durum")]]
+    table_data = [[tr_to_en("Tür / Kategori"), tr_to_en("Ödeme Şekli"), tr_to_en("Tarih"), tr_to_en("Tutar (TL)"), tr_to_en("Durum")]]
     
     for item in items:
         try:
