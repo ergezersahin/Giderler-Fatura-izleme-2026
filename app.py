@@ -13,6 +13,20 @@ from reportlab.lib import colors
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
+# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM ---
+st.markdown("""
+    <style>
+        /* Kart/Konteyner iç boşluklarını ve dikey mesafeleri daralt */
+        div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] {
+            align-items: center;
+        }
+        /* Tablo satırı görevindeki container'ların padding ve margin değerlerini küçült */
+        div.st-key-container, div[data-testid="stVerticalBlock"] > div.element-container {
+            margin-bottom: -10px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- DOSYA TABANLI KALICI VERİ YÖNETİMİ ---
 DATA_FILE = "expenses.json"
 
@@ -139,7 +153,7 @@ st.sidebar.markdown(
 )
 
 if menu == "Ana Panel":
-    st.title("💰 Gider dan Fatura Takipçisi")
+    st.title("💰 Gider ve Fatura Takipçisi")
     
     total_pending = sum(item["amount"] for item in st.session_state.expenses if not item["paid"])
     total_paid = sum(item["amount"] for item in st.session_state.expenses if item["paid"])
@@ -195,8 +209,9 @@ if menu == "Ana Panel":
                 
             status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
             
+            # Daha sıkı/kompakt bir satır görünümü
             with st.container(border=True):
-                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.08, 0.22, 0.18, 0.15, 0.14, 0.11, 0.12])
+                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
                 
                 new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
@@ -204,8 +219,8 @@ if menu == "Ana Panel":
                     save_expenses(st.session_state.expenses)
                     st.rerun()
                     
-                r_col2.markdown(f"**{item['type']}**\n\n`{item['bank']}`")
-                r_col3.markdown(f"📅 **{formatted_date}**")
+                r_col2.markdown(f"**{item['type']}** <span style='color:gray; font-size:12px;'>({item['bank']})</span>", unsafe_allow_html=True)
+                r_col3.markdown(f"📅 {formatted_date}")
                 r_col4.markdown(f"💰 **{item['amount']:,.2f} TL**")
                 r_col5.markdown(f"*{status_text}*")
                 
@@ -300,7 +315,7 @@ elif menu == "Yeni Ödeme Ekle":
                 save_expenses(st.session_state.expenses)
                 st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
             else:
-                st.error("Lütfen geçerli bir banka, kategori ve tutار girin.")
+                st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
 
 elif menu == "Tanımları Yönet":
     st.title("⚙️ Banka ve Kategori Yönetimi")
