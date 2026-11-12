@@ -203,12 +203,12 @@ if menu == "Ana Panel":
             except:
                 formatted_date = item["date"]
                 
-            status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
+            status_text = "ÖDENDİ ✅" if item["paid"] else "Bekliyor ⏳"
             
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
                 
-                new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
+                new_paid = r_col1.checkbox("ÖDENDİ", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
                     item["paid"] = new_paid
                     save_expenses(st.session_state.expenses)
@@ -288,7 +288,7 @@ elif menu == "Yeni Ödeme Ekle":
             
         amount_str = st.text_input("Tutar (TL)", value="", placeholder="Örn: 1250.50", key="amount_input")
         
-        paid_val = st.checkbox("Ödendi olarak işaretle", key="paid_input")
+        paid_val = st.checkbox("ÖDENDİ olarak işaretle", key="paid_input")
         note_val = st.text_area("Not (Opsiyonel)", key="note_input")
         
         submitted = st.form_submit_button("Ödemeyi Kaydet", type="primary", use_container_width=True)
