@@ -2,6 +2,8 @@ import streamlit as st
 import datetime
 import pandas as pd
 import io
+import json
+import os
 
 # PDF Raporlama için ReportLab kütüphaneleri
 from reportlab.lib.pagesizes import A4
@@ -9,11 +11,27 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-st.set_page_config(page_title="Gider dan Fatura Takipçisi", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
-# Oturum verilerini başlat
+# --- DOSYA TABANLI KALICI VERİ YÖNETİMİ ---
+DATA_FILE = "expenses.json"
+
+def load_expenses():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_expenses(expenses):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(expenses, f, ensure_ascii=False, indent=4)
+
+# Oturum verilerini dosyadan başlat
 if "expenses" not in st.session_state:
-    st.session_state.expenses = []
+    st.session_state.expenses = load_expenses()
 
 # Özel silinen/çıkarılan banka ve kategorileri takip etmek için session_state listeleri
 if "deleted_banks" not in st.session_state:
@@ -121,7 +139,7 @@ st.sidebar.markdown(
 )
 
 if menu == "Ana Panel":
-    st.title("💰 Gider ve Fatura Takipçisi")
+    st.title("💰 Gider dan Fatura Takipçisi")
     
     total_pending = sum(item["amount"] for item in st.session_state.expenses if not item["paid"])
     total_paid = sum(item["amount"] for item in st.session_state.expenses if item["paid"])
@@ -183,6 +201,7 @@ if menu == "Ana Panel":
                 new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
                     item["paid"] = new_paid
+                    save_expenses(st.session_state.expenses)
                     st.rerun()
                     
                 r_col2.markdown(f"**{item['type']}**\n\n`{item['bank']}`")
@@ -200,6 +219,7 @@ if menu == "Ana Panel":
                 
                 if r_col7.button("🗑️ Sil", key=f"del_{item['id']}", use_container_width=True):
                     st.session_state.expenses = [e for e in st.session_state.expenses if e["id"] != item["id"]]
+                    save_expenses(st.session_state.expenses)
                     st.rerun()
                 
                 if item.get("note"):
@@ -229,6 +249,7 @@ if menu == "Ana Panel":
                             item["type"] = e_type
                             item["amount"] = e_amount
                             item["note"] = e_note.strip()
+                            save_expenses(st.session_state.expenses)
                             st.session_state[edit_key] = False
                             st.success("Kayıt başarıyla güncellendi!")
                             st.rerun()
@@ -276,9 +297,10 @@ elif menu == "Yeni Ödeme Ekle":
                     "note": note_val.strip()
                 }
                 st.session_state.expenses.append(new_item)
+                save_expenses(st.session_state.expenses)
                 st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
             else:
-                st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
+                st.error("Lütfen geçerli bir banka, kategori ve tutار girin.")
 
 elif menu == "Tanımları Yönet":
     st.title("⚙️ Banka ve Kategori Yönetimi")
