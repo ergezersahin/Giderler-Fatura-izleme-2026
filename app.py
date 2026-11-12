@@ -13,7 +13,7 @@ from reportlab.lib import colors
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
-# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM ---
+# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM VE RENKLİ KARTLAR ---
 st.markdown("""
     <style>
         div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] {
@@ -182,6 +182,7 @@ if menu == "Ana Panel":
         search_query = st.text_input("🔍 Notlarda ara...").lower()
     
     sorted_expenses = sorted(st.session_state.expenses, key=lambda x: x.get("date", ""))
+    today_date = datetime.date.today()
     
     filtered_items = []
     for item in sorted_expenses:
@@ -198,12 +199,23 @@ if menu == "Ana Panel":
     else:
         for item in filtered_items:
             try:
-                date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d")
+                date_obj = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
                 formatted_date = date_obj.strftime("%d/%m/%Y")
             except:
+                date_obj = today_date
                 formatted_date = item["date"]
                 
-            status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
+            # --- VADE DURUM KONTROLÜ ---
+            is_paid = item["paid"]
+            if not is_paid:
+                if date_obj < today_date:
+                    status_badge = "🔴 VADESİ GEÇTİ"
+                elif date_obj == today_date:
+                    status_badge = "🟠 BUGÜN ÖDENECEK"
+                else:
+                    status_badge = "⏳ Bekliyor"
+            else:
+                status_badge = "Ödendi ✅"
             
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
@@ -217,7 +229,7 @@ if menu == "Ana Panel":
                 r_col2.markdown(f"**{item['type']}** <span style='color:gray; font-size:12px;'>({item['bank']})</span>", unsafe_allow_html=True)
                 r_col3.markdown(f"📅 {formatted_date}")
                 r_col4.markdown(f"💰 **{item['amount']:,.2f} TL**")
-                r_col5.markdown(f"*{status_text}*")
+                r_col5.markdown(f"*{status_badge}*")
                 
                 edit_key = f"edit_mode_{item['id']}"
                 if edit_key not in st.session_state:
@@ -239,7 +251,7 @@ if menu == "Ana Panel":
                     st.markdown("---")
                     st.markdown(f"##### ✍️ Kaydı Düzenle: {item['type']}")
                     with st.form(key=f"form_edit_{item['id']}"):
-                        e_date = st.date_input("Tarih", datetime.datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"ed_date_{item['id']}")
+                        e_date = st.date_input("Tarih", date_obj, key=f"ed_date_{item['id']}")
                         
                         e_bank = st.selectbox("Banka / Ödeme Şekli", all_banks, index=all_banks.index(item["bank"]) if item["bank"] in all_banks else 0, key=f"ed_bank_{item['id']}")
                         e_type = st.selectbox("Kategori / Tür", all_types, index=all_types.index(item["type"]) if item["type"] in all_types else 0, key=f"ed_type_{item['id']}")
@@ -319,7 +331,7 @@ elif menu == "Yeni Ödeme Ekle":
                 st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
 
 elif menu == "Tanımları Yönet":
-    st.title("⚙️ Banka dan Kategori Yönetimi")
+    st.title("⚙️ Banka ve Kategori Yönetimi")
     st.write("Listelerde görünmesini istemediğiniz banka veya kategorileri buradan silebilirsiniz.")
     
     col_m1, col_m2 = st.columns(2)
@@ -332,7 +344,6 @@ elif menu == "Tanımları Yönet":
             if rc2.button("Kaldır", key=f"del_bank_{b}", use_container_width=True):
                 if b not in st.session_state.deleted_banks:
                     st.session_state.deleted_banks.append(b)
-                    save_expenses(st.session_state.expenses) # Opsiyonel: Veriler güncellendiğinde kaydedilir
                     st.success(f"'{b}' bankası listeden kaldırıldı.")
                     st.rerun()
                     
@@ -341,16 +352,14 @@ elif menu == "Tanımları Yönet":
         for t in all_types:
             tc1, tc2 = st.columns([0.7, 0.3])
             tc1.markdown(f"- {t}")
-            if rc2.button("Kaldır", key=f"del_type_{t}", use_container_width=True):
+            if tc2.button("Kaldır", key=f"del_type_{t}", use_container_width=True):
                 if t not in st.session_state.deleted_types:
                     st.session_state.deleted_types.append(t)
                     st.success(f"'{t}' kategorisi listeden kaldırıldı.")
                     st.rerun()
 
 elif menu == "Çıkış Yap":
-    # Çıkış yapmadan önce verileri son kez güvenceye al (kaydet)
     save_expenses(st.session_state.expenses)
-    
     st.title("🔒 Oturum Kapatıldı")
     st.success("Tüm verileriniz başarıyla kaydedildi (`expenses.json`). Güvenle çıkış yapabilirsiniz.")
     st.info("Uygulamaya tekrar dönmek için sol menüden başka bir sayfa seçebilirsiniz.")
