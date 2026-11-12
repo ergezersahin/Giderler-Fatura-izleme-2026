@@ -16,11 +16,9 @@ st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", la
 # --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM ---
 st.markdown("""
     <style>
-        /* Kart/Konteyner iç boşluklarını ve dikey mesafeleri daralt */
         div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] {
             align-items: center;
         }
-        /* Tablo satırı görevindeki container'ların padding ve margin değerlerini küçült */
         div.st-key-container, div[data-testid="stVerticalBlock"] > div.element-container {
             margin-bottom: -10px !important;
         }
@@ -43,28 +41,23 @@ def save_expenses(expenses):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(expenses, f, ensure_ascii=False, indent=4)
 
-# Oturum verilerini dosyadan başlat
 if "expenses" not in st.session_state:
     st.session_state.expenses = load_expenses()
 
-# Özel silinen/çıkarılan banka ve kategorileri takip etmek için session_state listeleri
 if "deleted_banks" not in st.session_state:
     st.session_state.deleted_banks = []
 if "deleted_types" not in st.session_state:
     st.session_state.deleted_types = []
 
-# Varsayılan banka ve kategori listeleri
 default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "TEB", "Nakit", "Diğer"]
 default_types = ["Kredi Kartı Ödemesi", "Bina / Site Aidatı", "Elektrik Bedeli", "Su Bedeli", "Doğalgaz Bedeli", "İnternet/TV Bedeli", "Kira Gelir Vergisi", "Motorlu Taşıt Vergisi","Emlak Vergisi", "Apt. Temizlik Bedeli", "Diğer"]
 
-# Mevcut kayıtlı banka ve türleri birleştir ve silinenleri hariç tut
 existing_banks = list(set(item["bank"] for item in st.session_state.expenses))
 all_banks = sorted(list(set([b for b in (default_banks + existing_banks) if b not in st.session_state.deleted_banks])))
 
 existing_types = list(set(item["type"] for item in st.session_state.expenses))
 all_types = sorted(list(set([t for t in (default_types + existing_types) if t not in st.session_state.deleted_types])))
 
-# --- TÜRKÇE KARAKTER DÖNÜŞTÜRÜCÜ (PDF için) ---
 def tr_to_en(text):
     if not isinstance(text, str):
         return str(text)
@@ -73,7 +66,6 @@ def tr_to_en(text):
         text = text.replace(k, v)
     return text
 
-# --- PDF OLUŞTURMA FONKSİYONU ---
 def generate_pdf(items):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
@@ -209,7 +201,6 @@ if menu == "Ana Panel":
                 
             status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
             
-            # Daha sıkı/kompakt bir satır görünümü
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
                 
@@ -291,7 +282,9 @@ elif menu == "Yeni Ödeme Ekle":
             type_choice = st.selectbox("Listeden Seçin", all_types, key="type_select")
             custom_type = st.text_input("Veya Yeni Kategori Yazın (İsteğe bağlı)", placeholder="Örn: Vergi, Aidat", key="custom_type_input")
             
-        amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0, key="amount_input")
+        # Tutar alanı için text_input kullanılarak doğrudan tıklayıp yazma esnekliği sağlandı
+        amount_str = st.text_input("Tutar (TL)", value="", placeholder="Örn: 1250.50", key="amount_input")
+        
         paid_val = st.checkbox("Ödendi olarak işaretle", key="paid_input")
         note_val = st.text_area("Not (Opsiyonel)", key="note_input")
         
@@ -301,13 +294,19 @@ elif menu == "Yeni Ödeme Ekle":
             final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
             final_type = custom_type.strip() if custom_type.strip() else type_choice
             
-            if final_bank and final_type and amount_val > 0:
+            # Girilen tutar metnini güvenli bir şekilde sayıya dönüştür
+            try:
+                clean_amount = float(amount_str.replace(" ", "").replace("TL", "").replace(".", "").replace(",", ".")) if amount_str else 0.0
+            except:
+                clean_amount = 0.0
+            
+            if final_bank and final_type and clean_amount > 0:
                 new_item = {
                     "id": str(datetime.datetime.now().timestamp()),
                     "date": str(date_val),
                     "bank": final_bank,
                     "type": final_type,
-                    "amount": amount_val,
+                    "amount": clean_amount,
                     "paid": paid_val,
                     "note": note_val.strip()
                 }
