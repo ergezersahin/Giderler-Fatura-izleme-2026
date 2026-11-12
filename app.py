@@ -9,7 +9,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Gider dan Fatura Takipçisi", page_icon="💰", layout="wide")
 
 # Oturum verilerini başlat
 if "expenses" not in st.session_state:
@@ -114,6 +114,12 @@ def generate_pdf(items):
 st.sidebar.title("📌 Menü")
 menu = st.sidebar.selectbox("Sayfa Seçin", ["Ana Panel", "Yeni Ödeme Ekle", "Tanımları Yönet"])
 
+st.sidebar.divider()
+st.sidebar.markdown(
+    "<div style='font-size: 11px; color: #6b7280; text-align: center;'>Bu program Şahin ERGEZER tarafından hazırlanmıştır (2026).</div>", 
+    unsafe_allow_html=True
+)
+
 if menu == "Ana Panel":
     st.title("💰 Gider ve Fatura Takipçisi")
     
@@ -172,7 +178,7 @@ if menu == "Ana Panel":
             status_text = "Ödendi ✅" if item["paid"] else "Bekliyor ⏳"
             
             with st.container(border=True):
-                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.1, 0.25, 0.2, 0.15, 0.15, 0.15])
+                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.08, 0.22, 0.18, 0.15, 0.14, 0.11, 0.12])
                 
                 new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
@@ -184,52 +190,95 @@ if menu == "Ana Panel":
                 r_col4.markdown(f"💰 **{item['amount']:,.2f} TL**")
                 r_col5.markdown(f"*{status_text}*")
                 
-                if r_col6.button("🗑️ Sil", key=f"del_{item['id']}", use_container_width=True):
+                edit_key = f"edit_mode_{item['id']}"
+                if edit_key not in st.session_state:
+                    st.session_state[edit_key] = False
+                
+                if r_col6.button("✏️ Düzenle", key=f"btn_edit_{item['id']}", use_container_width=True):
+                    st.session_state[edit_key] = not st.session_state[edit_key]
+                    st.rerun()
+                
+                if r_col7.button("🗑️ Sil", key=f"del_{item['id']}", use_container_width=True):
                     st.session_state.expenses = [e for e in st.session_state.expenses if e["id"] != item["id"]]
                     st.rerun()
                 
                 if item.get("note"):
                     st.caption(f"📝 Not: {item['note']}")
+                
+                if st.session_state[edit_key]:
+                    st.markdown("---")
+                    st.markdown(f"##### ✍️ Kaydı Düzenle: {item['type']}")
+                    with st.form(key=f"form_edit_{item['id']}"):
+                        e_date = st.date_input("Tarih", datetime.datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"ed_date_{item['id']}")
+                        
+                        e_bank = st.selectbox("Banka / Ödeme Şekli", all_banks, index=all_banks.index(item["bank"]) if item["bank"] in all_banks else 0, key=f"ed_bank_{item['id']}")
+                        e_type = st.selectbox("Kategori / Tür", all_types, index=all_types.index(item["type"]) if item["type"] in all_types else 0, key=f"ed_type_{item['id']}")
+                        
+                        e_amount = st.number_input("Tutar (TL)", min_value=0.0, value=float(item["amount"]), step=10.0, key=f"ed_amount_{item['id']}")
+                        e_note = st.text_area("Not", value=item.get("note", ""), key=f"ed_note_{item['id']}")
+                        
+                        col_sub1, col_sub2 = st.columns(2)
+                        with col_sub1:
+                            submit_update = st.form_submit_button("Değişiklikleri Kaydet", use_container_width=True)
+                        with col_sub2:
+                            cancel_update = st.form_submit_button("İptal", use_container_width=True)
+                        
+                        if submit_update:
+                            item["date"] = str(e_date)
+                            item["bank"] = e_bank
+                            item["type"] = e_type
+                            item["amount"] = e_amount
+                            item["note"] = e_note.strip()
+                            st.session_state[edit_key] = False
+                            st.success("Kayıt başarıyla güncellendi!")
+                            st.rerun()
+                        
+                        if cancel_update:
+                            st.session_state[edit_key] = False
+                            st.rerun()
 
 elif menu == "Yeni Ödeme Ekle":
     st.title("➕ Yeni Ödeme Kaydı")
     
-    date_val = st.date_input("Ödeme Tarihi", datetime.date.today())
-    
-    col_b, col_t = st.columns(2)
-    
-    with col_b:
-        st.markdown("##### Banka Seçimi")
-        bank_choice = st.selectbox("Listeden Seçin", all_banks, key="bank_select")
-        custom_bank = st.text_input("Veya Yeni Banka Yazın (İsteğe bağlı)", placeholder="Örn: QNB, Fibabanka")
+    with st.form("add_expense_form", clear_on_submit=True):
+        date_val = st.date_input("Ödeme Tarihi", datetime.date.today())
         
-    with col_t:
-        st.markdown("##### Kategori Seçimi")
-        type_choice = st.selectbox("Listeden Seçin", all_types, key="type_select")
-        custom_type = st.text_input("Veya Yeni Kategori Yazın (İsteğe bağlı)", placeholder="Örn: Vergi, Aidat")
+        col_b, col_t = st.columns(2)
         
-    amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0)
-    paid_val = st.checkbox("Ödendi olarak işaretle")
-    note_val = st.text_area("Not (Opsiyonel)")
-    
-    if st.button("Ödemeyi Kaydet", type="primary", use_container_width=True):
-        final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
-        final_type = custom_type.strip() if custom_type.strip() else type_choice
+        with col_b:
+            st.markdown("##### Banka Seçimi")
+            bank_choice = st.selectbox("Listeden Seçin", all_banks, key="bank_select")
+            custom_bank = st.text_input("Veya Yeni Banka Yazın (İsteğe bağlı)", placeholder="Örn: QNB, Fibabanka", key="custom_bank_input")
+            
+        with col_t:
+            st.markdown("##### Kategori Seçimi")
+            type_choice = st.selectbox("Listeden Seçin", all_types, key="type_select")
+            custom_type = st.text_input("Veya Yeni Kategori Yazın (İsteğe bağlı)", placeholder="Örn: Vergi, Aidat", key="custom_type_input")
+            
+        amount_val = st.number_input("Tutar (TL)", min_value=0.0, step=10.0, key="amount_input")
+        paid_val = st.checkbox("Ödendi olarak işaretle", key="paid_input")
+        note_val = st.text_area("Not (Opsiyonel)", key="note_input")
         
-        if final_bank and final_type and amount_val > 0:
-            new_item = {
-                "id": str(datetime.datetime.now().timestamp()),
-                "date": str(date_val),
-                "bank": final_bank,
-                "type": final_type,
-                "amount": amount_val,
-                "paid": paid_val,
-                "note": note_val.strip()
-            }
-            st.session_state.expenses.append(new_item)
-            st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
-        else:
-            st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
+        submitted = st.form_submit_button("Ödemeyi Kaydet", type="primary", use_container_width=True)
+        
+        if submitted:
+            final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
+            final_type = custom_type.strip() if custom_type.strip() else type_choice
+            
+            if final_bank and final_type and amount_val > 0:
+                new_item = {
+                    "id": str(datetime.datetime.now().timestamp()),
+                    "date": str(date_val),
+                    "bank": final_bank,
+                    "type": final_type,
+                    "amount": amount_val,
+                    "paid": paid_val,
+                    "note": note_val.strip()
+                }
+                st.session_state.expenses.append(new_item)
+                st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
+            else:
+                st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
 
 elif menu == "Tanımları Yönet":
     st.title("⚙️ Banka ve Kategori Yönetimi")
