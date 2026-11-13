@@ -13,7 +13,7 @@ from reportlab.lib import colors
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
 
-# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM VE RENKLİ ROZETLER ---
+# --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM ---
 st.markdown("""
     <style>
         div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] {
@@ -25,21 +25,55 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- DOSYA TABANLI KALICI VERİ YÖNETİMİ (GitHub'daki data.json ile uyumlu) ---
-DATA_FILE = "data.json"
+# --- EXCEL (.XLSX) TABANLI KALICI VERİ YÖNETİMİ ---
+EXCEL_FILE = "giderler.xlsx"
+OLD_JSON_FILE = "data.json"
 
 def load_expenses():
-    if os.path.exists(DATA_FILE):
+    # 1. Öncelikle Excel dosyası varsa oradan oku
+    if os.path.exists(EXCEL_FILE):
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
+            df = pd.read_excel(EXCEL_FILE, dtype={"id": str, "date": str, "bank": str, "type": str, "note": str})
+            df["note"] = df["note"].fillna("")
+            df["paid"] = df["paid"].fillna(False).astype(bool)
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+            return df.to_dict(orient="records")
+        except Exception:
             return []
+    
+    # 2. Excel yoksa ama eski data.json varsa verileri kurtar ve Excel'e dönüştür
+    if os.path.exists(OLD_JSON_FILE):
+        try:
+            with open(OLD_JSON_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data:
+                    save_expenses(data)
+                return data
+        except Exception:
+            return []
+            
     return []
 
 def save_expenses(expenses):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(expenses, f, ensure_ascii=False, indent=4)
+    columns = ["id", "date", "bank", "type", "amount", "paid", "note"]
+    if expenses:
+        df = pd.DataFrame(expenses)
+        for col in columns:
+            if col not in df.columns:
+                df[col] = "" if col not in ["amount", "paid"] else (0.0 if col == "amount" else False)
+        df = df[columns]
+    else:
+        df = pd.DataFrame(columns=columns)
+        
+    df.to_excel(EXCEL_FILE, index=False, engine="openpyxl")
+
+def get_excel_bytes(expenses):
+    columns = ["id", "date", "bank", "type", "amount", "paid", "note"]
+    df = pd.DataFrame(expenses) if expenses else pd.DataFrame(columns=columns)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Giderler")
+    return output.getvalue()
 
 if "expenses" not in st.session_state:
     st.session_state.expenses = load_expenses()
@@ -50,12 +84,12 @@ if "deleted_types" not in st.session_state:
     st.session_state.deleted_types = []
 
 default_banks = ["Garanti", "Ziraat", "İş Bankası", "Yapı Kredi", "Akbank", "TEB", "Nakit", "Diğer"]
-default_types = ["Kredi Kartı Ödemesi", "Bina / Site Aidatı", "Elektrik Bedeli", "Su Bedeli", "Doğalgaz Bedeli", "İnternet/TV Bedeli", "Kira Gelir Vergisi", "Motorlu Taşıt Vergisi","Emlak Vergisi", "Apt. Temizlik Bedeli", "Diğer"]
+default_types = ["Kredi Kartı Ödemesi", "Bina / Site Aidatı", "Elektrik Bedeli", "Su Bedeli", "Doğalgaz Bedeli", "İnternet/TV Bedeli", "Kira Gelir Vergisi", "Motorlu Taşıt Vergisi", "Emlak Vergisi", "Apt. Temizlik Bedeli", "Diğer"]
 
-existing_banks = list(set(item["bank"] for item in st.session_state.expenses))
+existing_banks = list(set(item["bank"] for item in st.session_state.expenses if item.get("bank")))
 all_banks = sorted(list(set([b for b in (default_banks + existing_banks) if b not in st.session_state.deleted_banks])))
 
-existing_types = list(set(item["type"] for item in st.session_state.expenses))
+existing_types = list(set(item["type"] for item in st.session_state.expenses if item.get("type")))
 all_types = sorted(list(set([t for t in (default_types + existing_types) if t not in st.session_state.deleted_types])))
 
 def tr_to_en(text):
@@ -138,7 +172,7 @@ def generate_pdf(items):
 
 
 st.sidebar.title("📌 Menü")
-menu = st.sidebar.selectbox("Sayfa Seçin", ["Ana Panel", "Yeni Ödeme Ekle", "Tanımları Yönet", "Çıkış Yap"])
+menu = st.sidebar.selectbox("Sayfa Seçin", ["Ana Panel", "Yeni Ödeme Ekle", "Tanımları Yönet", "Excel Yedek / Geri Yükle", "Çıkış Yap"])
 
 st.sidebar.divider()
 st.sidebar.markdown(
@@ -158,10 +192,20 @@ if menu == "Ana Panel":
     
     st.divider()
     
-    col_h1, col_h2 = st.columns([0.6, 0.4])
+    col_h1, col_h2, col_h3 = st.columns([0.4, 0.3, 0.3])
     with col_h1:
         st.subheader("📋 Ödeme Listesi")
     with col_h2:
+        if st.session_state.expenses:
+            excel_bytes = get_excel_bytes(st.session_state.expenses)
+            st.download_button(
+                label="📊 Excel (.xlsx) İndir",
+                data=excel_bytes,
+                file_name=f"giderler_{datetime.date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+    with col_h3:
         if st.session_state.expenses:
             pdf_bytes = generate_pdf(st.session_state.expenses)
             st.download_button(
@@ -190,7 +234,7 @@ if menu == "Ana Panel":
             continue
         if selected_type_filter != "Tümü" and item["type"] != selected_type_filter:
             continue
-        if search_query and not search_query in item.get("note", "").lower():
+        if search_query and search_query not in str(item.get("note", "")).lower():
             continue
         filtered_items.append(item)
         
@@ -256,7 +300,7 @@ if menu == "Ana Panel":
                         e_type = st.selectbox("Kategori / Tür", all_types, index=all_types.index(item["type"]) if item["type"] in all_types else 0, key=f"ed_type_{item['id']}")
                         
                         e_amount = st.number_input("Tutar (TL)", min_value=0.0, value=float(item["amount"]), step=10.0, key=f"ed_amount_{item['id']}")
-                        e_note = st.text_area("Not", value=item.get("note", ""), key=f"ed_note_{item['id']}")
+                        e_note = st.text_area("Not", value=str(item.get("note", "")), key=f"ed_note_{item['id']}")
                         
                         col_sub1, col_sub2 = st.columns(2)
                         with col_sub1:
@@ -357,8 +401,47 @@ elif menu == "Tanımları Yönet":
                     st.success(f"'{t}' kategorisi listeden kaldırıldı.")
                     st.rerun()
 
+elif menu == "Excel Yedek / Geri Yükle":
+    st.title("📂 Excel Veri Yönetimi")
+    st.info("Tüm veriler arka planda `giderler.xlsx` dosyasında tutulur. Sunucu sıfırlanmalarına karşı buradan bilgisayarınıza yedek alabilir veya mevcut Excel dosyanızı sisteme geri yükleyebilirsiniz.")
+    
+    col_ex1, col_ex2 = st.columns(2)
+    
+    with col_ex1:
+        st.subheader("1. Bilgisayara Yedek İndir")
+        if st.session_state.expenses:
+            excel_bytes = get_excel_bytes(st.session_state.expenses)
+            st.download_button(
+                label="📥 giderler.xlsx Dosyasını İndir",
+                data=excel_bytes,
+                file_name=f"giderler_{datetime.date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True
+            )
+        else:
+            st.warning("İndirilecek kayıt bulunamadı.")
+            
+    with col_ex2:
+        st.subheader("2. Excel Dosyasından Geri Yükle")
+        uploaded_file = st.file_uploader("Daha önce indirdiğiniz .xlsx dosyasını seçin", type=["xlsx"])
+        if uploaded_file is not None:
+            if st.button("📤 Verileri Excel'den Yükle ve Kaydet", use_container_width=True):
+                try:
+                    df_up = pd.read_excel(uploaded_file, dtype={"id": str, "date": str, "bank": str, "type": str, "note": str})
+                    df_up["note"] = df_up["note"].fillna("")
+                    df_up["paid"] = df_up["paid"].fillna(False).astype(bool)
+                    df_up["amount"] = pd.to_numeric(df_up["amount"], errors="coerce").fillna(0.0)
+                    
+                    st.session_state.expenses = df_up.to_dict(orient="records")
+                    save_expenses(st.session_state.expenses)
+                    st.success("Excel verileri başarıyla sisteme aktarıldı ve kaydedildi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Dosya okunurken hata oluştu: {e}")
+
 elif menu == "Çıkış Yap":
     save_expenses(st.session_state.expenses)
     st.title("🔒 Oturum Kapatıldı")
-    st.success("Tüm verileriniz başarıyla kaydedildi (`data.json`). Güvenle çıkış yapabilirsiniz.")
+    st.success("Tüm verileriniz başarıyla Excel dosyasına (`giderler.xlsx`) kaydedildi. Güvenle çıkış yapabilirsiniz.")
     st.info("Uygulamaya tekrar dönmek için sol menüden başka bir sayfa seçebilirsiniz.")
