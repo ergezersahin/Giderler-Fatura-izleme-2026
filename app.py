@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 import pandas as pd
 import io
@@ -25,12 +26,45 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- KUTUYA TIKLANDIĞINDA İÇERİĞİ OTOMATİK SEÇEN JS (Anında Üzerine Yazma İçin) ---
+components.html("""
+    <script>
+    const doc = window.parent.document;
+    doc.addEventListener('focusin', function(e) {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') {
+            if (e.target.ariaLabel && e.target.ariaLabel.includes('Tutar')) {
+                e.target.select();
+            }
+        }
+    });
+    </script>
+""", height=0, width=0)
+
+# --- TUTAR METNİNİ GÜVENLİ SAYIYA ÇEVİRME ---
+def parse_amount(amount_str):
+    if not amount_str:
+        return 0.0
+    s = str(amount_str).replace(" ", "").replace("TL", "").replace("₺", "").strip()
+    if not s:
+        return 0.0
+    # Hem virgül hem nokta varsa (örn: 1.250,50) binlik ayracını sil
+    if "," in s and "." in s:
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
 # --- EXCEL (.XLSX) TABANLI KALICI VERİ YÖNETİMİ ---
 EXCEL_FILE = "giderler.xlsx"
 OLD_JSON_FILE = "data.json"
 
 def load_expenses():
-    # 1. Öncelikle Excel dosyası varsa oradan oku
     if os.path.exists(EXCEL_FILE):
         try:
             df = pd.read_excel(EXCEL_FILE, dtype={"id": str, "date": str, "bank": str, "type": str, "note": str})
@@ -41,7 +75,6 @@ def load_expenses():
         except Exception:
             return []
     
-    # 2. Excel yoksa ama eski data.json varsa verileri kurtar ve Excel'e dönüştür
     if os.path.exists(OLD_JSON_FILE):
         try:
             with open(OLD_JSON_FILE, "r", encoding="utf-8") as f:
@@ -140,7 +173,7 @@ def generate_pdf(items):
         except:
             formatted_date = item["date"]
             
-        status = "Odendi" if item["paid"] else "Bekliyor"
+        status = "ÖDENDİ" if item["paid"] else "Bekliyor"
         table_data.append([
             tr_to_en(item["type"]),
             tr_to_en(item["bank"]),
@@ -258,12 +291,12 @@ if menu == "Ana Panel":
                 else:
                     status_badge = "<span style='color: #4b5563; background-color: #f3f4f6; padding: 3px 8px; border-radius: 4px; font-size: 12px;'>⏳ Bekliyor</span>"
             else:
-                status_badge = "<span style='color: white; background-color: #16a34a; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>Ödendi ✅</span>"
+                status_badge = "<span style='color: white; background-color: #16a34a; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;'>ÖDENDİ ✅</span>"
             
             with st.container(border=True):
                 r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.06, 0.24, 0.18, 0.15, 0.15, 0.11, 0.11])
                 
-                new_paid = r_col1.checkbox("Ödendi", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
+                new_paid = r_col1.checkbox("ÖDENDİ", value=item["paid"], key=f"paid_{item['id']}", label_visibility="collapsed")
                 if new_paid != item["paid"]:
                     item["paid"] = new_paid
                     save_expenses(st.session_state.expenses)
@@ -299,7 +332,7 @@ if menu == "Ana Panel":
                         e_bank = st.selectbox("Banka / Ödeme Şekli", all_banks, index=all_banks.index(item["bank"]) if item["bank"] in all_banks else 0, key=f"ed_bank_{item['id']}")
                         e_type = st.selectbox("Kategori / Tür", all_types, index=all_types.index(item["type"]) if item["type"] in all_types else 0, key=f"ed_type_{item['id']}")
                         
-                        e_amount = st.number_input("Tutar (TL)", min_value=0.0, value=float(item["amount"]), step=10.0, key=f"ed_amount_{item['id']}")
+                        e_amount_str = st.text_input("Tutar (TL)", value=f"{float(item['amount']):.2f}", key=f"ed_amount_{item['id']}")
                         e_note = st.text_area("Not", value=str(item.get("note", "")), key=f"ed_note_{item['id']}")
                         
                         col_sub1, col_sub2 = st.columns(2)
@@ -309,15 +342,19 @@ if menu == "Ana Panel":
                             cancel_update = st.form_submit_button("İptal", use_container_width=True)
                         
                         if submit_update:
-                            item["date"] = str(e_date)
-                            item["bank"] = e_bank
-                            item["type"] = e_type
-                            item["amount"] = e_amount
-                            item["note"] = e_note.strip()
-                            save_expenses(st.session_state.expenses)
-                            st.session_state[edit_key] = False
-                            st.success("Kayıt başarıyla güncellendi!")
-                            st.rerun()
+                            clean_e_amount = parse_amount(e_amount_str)
+                            if clean_e_amount > 0:
+                                item["date"] = str(e_date)
+                                item["bank"] = e_bank
+                                item["type"] = e_type
+                                item["amount"] = clean_e_amount
+                                item["note"] = e_note.strip()
+                                save_expenses(st.session_state.expenses)
+                                st.session_state[edit_key] = False
+                                st.success("Kayıt başarıyla güncellendi!")
+                                st.rerun()
+                            else:
+                                st.error("Lütfen geçerli bir tutar girin.")
                         
                         if cancel_update:
                             st.session_state[edit_key] = False
@@ -341,9 +378,9 @@ elif menu == "Yeni Ödeme Ekle":
             type_choice = st.selectbox("Listeden Seçin", all_types, key="type_select")
             custom_type = st.text_input("Veya Yeni Kategori Yazın (İsteğe bağlı)", placeholder="Örn: Vergi, Aidat", key="custom_type_input")
             
-        amount_str = st.text_input("Tutar (TL)", value="", placeholder="Örn: 1250.50", key="amount_input")
+        amount_str = st.text_input("Tutar (TL)", value="", placeholder="Tutar girin (Örn: 1250,50)", key="amount_input")
         
-        paid_val = st.checkbox("Ödendi olarak işaretle", key="paid_input")
+        paid_val = st.checkbox("ÖDENDİ olarak işaretle", key="paid_input")
         note_val = st.text_area("Not (Opsiyonel)", key="note_input")
         
         submitted = st.form_submit_button("Ödemeyi Kaydet", type="primary", use_container_width=True)
@@ -351,11 +388,7 @@ elif menu == "Yeni Ödeme Ekle":
         if submitted:
             final_bank = custom_bank.strip() if custom_bank.strip() else bank_choice
             final_type = custom_type.strip() if custom_type.strip() else type_choice
-            
-            try:
-                clean_amount = float(amount_str.replace(" ", "").replace("TL", "").replace(".", "").replace(",", ".")) if amount_str else 0.0
-            except:
-                clean_amount = 0.0
+            clean_amount = parse_amount(amount_str)
             
             if final_bank and final_type and clean_amount > 0:
                 new_item = {
