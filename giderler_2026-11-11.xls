@@ -1,0 +1,4 @@
+id,date,bank,type,amount,paid,note
+1,2026-11-01,Garanti,Kredi Kartı,4500.0,False,Kasım ekstresi
+2,2026-11-05,Ziraat,Elektrik,650.0,True,Otomatik ödeme
+3,2026-11-10,İş Bankası,Su,320.0,False,Fatura
