@@ -5,6 +5,8 @@ import pandas as pd
 import io
 import json
 import os
+import base64
+import requests
 
 # PDF Raporlama için ReportLab kütüphaneleri
 from reportlab.lib.pagesizes import A4
@@ -13,6 +15,19 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 st.set_page_config(page_title="Gider ve Fatura Takipçisi", page_icon="💰", layout="wide")
+
+# --- GITHUB API AYARLARI ---
+GITHUB_OWNER = "ergezersahin"
+GITHUB_REPO = "Giderler-Fatura-izleme-2026"
+EXCEL_FILE = "giderler.xlsx"
+OLD_JSON_FILE = "data.json"
+
+def get_github_headers():
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    return {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
 
 # --- CSS İLE KOMPAKT / SIKILAŞTIRILMIŞ GÖRÜNÜM ---
 st.markdown("""
@@ -26,7 +41,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- KUTUYA TIKLANDIĞINDA İÇERİĞİ OTOMATİK SEÇEN JS (Anında Üzerine Yazma İçin) ---
+# --- KUTUYA TIKLANDIĞINDA İÇERİĞİ OTOMATİK SEÇEN JS ---
 components.html("""
     <script>
     const doc = window.parent.document;
@@ -47,7 +62,6 @@ def parse_amount(amount_str):
     s = str(amount_str).replace(" ", "").replace("TL", "").replace("₺", "").strip()
     if not s:
         return 0.0
-    # Hem virgül hem nokta varsa (örn: 1.250,50) binlik ayracını sil
     if "," in s and "." in s:
         if s.rfind(",") > s.rfind("."):
             s = s.replace(".", "").replace(",", ".")
@@ -60,11 +74,26 @@ def parse_amount(amount_str):
     except ValueError:
         return 0.0
 
-# --- EXCEL (.XLSX) TABANLI KALICI VERİ YÖNETİMİ ---
-EXCEL_FILE = "giderler.xlsx"
-OLD_JSON_FILE = "data.json"
-
+# --- GITHUB TABANLI KALICI EXCEL VERİ YÖNETİMİ ---
 def load_expenses():
+    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{EXCEL_FILE}"
+    headers = get_github_headers()
+    
+    # 1. Önce doğrudan GitHub'daki güncel giderler.xlsx dosyasını okumayı dene
+    if "GITHUB_TOKEN" in st.secrets:
+        try:
+            res = requests.get(url, headers=headers)
+            if res.status_code == 200:
+                content = base64.b64decode(res.json()["content"])
+                df = pd.read_excel(io.BytesIO(content), dtype={"id": str, "date": str, "bank": str, "type": str, "note": str})
+                df["note"] = df["note"].fillna("")
+                df["paid"] = df["paid"].fillna(False).astype(bool)
+                df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+                return df.to_dict(orient="records")
+        except Exception as e:
+            st.warning(f"GitHub okuma uyarısı: {e}")
+
+    # 2. Yerelde varsa oku
     if os.path.exists(EXCEL_FILE):
         try:
             df = pd.read_excel(EXCEL_FILE, dtype={"id": str, "date": str, "bank": str, "type": str, "note": str})
@@ -74,7 +103,8 @@ def load_expenses():
             return df.to_dict(orient="records")
         except Exception:
             return []
-    
+            
+    # 3. Eski data.json varsa ilk geçiş için oku ve GitHub'a kaydet
     if os.path.exists(OLD_JSON_FILE):
         try:
             with open(OLD_JSON_FILE, "r", encoding="utf-8") as f:
@@ -98,7 +128,42 @@ def save_expenses(expenses):
     else:
         df = pd.DataFrame(columns=columns)
         
-    df.to_excel(EXCEL_FILE, index=False, engine="openpyxl")
+    # Geçici belleğe kaydet
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Giderler")
+    excel_bytes = output.getvalue()
+    
+    # Yerel diske de yaz
+    with open(EXCEL_FILE, "wb") as f:
+        f.write(excel_bytes)
+
+    # Doğrudan GitHub deposuna kalıcı olarak gönder (Commit)
+    if "GITHUB_TOKEN" not in st.secrets:
+        st.error("⚠️ Streamlit Secrets içinde GITHUB_TOKEN tanımlı değil! Veriler kalıcı kaydedilemedi.")
+        return
+
+    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{EXCEL_FILE}"
+    headers = get_github_headers()
+    
+    # Dosya GitHub'da zaten varsa güncel SHA değerini al
+    sha = None
+    get_res = requests.get(url, headers=headers)
+    if get_res.status_code == 200:
+        sha = get_res.json().get("sha")
+        
+    encoded_content = base64.b64encode(excel_bytes).decode("utf-8")
+    payload = {
+        "message": f"Giderler güncellendi ({datetime.datetime.now().strftime('%d/%m/%Y %H:%M')})",
+        "content": encoded_content,
+        "branch": "main"
+    }
+    if sha:
+        payload["sha"] = sha
+        
+    put_res = requests.put(url, headers=headers, json=payload)
+    if put_res.status_code not in [200, 201]:
+        st.error(f"GitHub'a kayıt sırasında hata oluştu: {put_res.json().get('message')}")
 
 def get_excel_bytes(expenses):
     columns = ["id", "date", "bank", "type", "amount", "paid", "note"]
@@ -402,7 +467,7 @@ elif menu == "Yeni Ödeme Ekle":
                 }
                 st.session_state.expenses.append(new_item)
                 save_expenses(st.session_state.expenses)
-                st.success(f"Ödeme başarıyla eklendi! ({final_bank} - {final_type})")
+                st.success(f"Ödeme başarıyla eklendi ve GitHub'a kaydedildi! ({final_bank} - {final_type})")
             else:
                 st.error("Lütfen geçerli bir banka, kategori ve tutar girin.")
 
@@ -436,7 +501,7 @@ elif menu == "Tanımları Yönet":
 
 elif menu == "Excel Yedek / Geri Yükle":
     st.title("📂 Excel Veri Yönetimi")
-    st.info("Tüm veriler arka planda `giderler.xlsx` dosyasında tutulur. Sunucu sıfırlanmalarına karşı buradan bilgisayarınıza yedek alabilir veya mevcut Excel dosyanızı sisteme geri yükleyebilirsiniz.")
+    st.info("Tüm veriler arka planda GitHub deponuzdaki `giderler.xlsx` dosyasında kalıcı olarak tutulur. Bilgisayarınızdaki eski bir Excel dosyasını buraya yükleyerek tek seferde GitHub'a aktarabilirsiniz.")
     
     col_ex1, col_ex2 = st.columns(2)
     
@@ -459,7 +524,7 @@ elif menu == "Excel Yedek / Geri Yükle":
         st.subheader("2. Excel Dosyasından Geri Yükle")
         uploaded_file = st.file_uploader("Daha önce indirdiğiniz .xlsx dosyasını seçin", type=["xlsx"])
         if uploaded_file is not None:
-            if st.button("📤 Verileri Excel'den Yükle ve Kaydet", use_container_width=True):
+            if st.button("📤 Verileri Excel'den Yükle ve GitHub'a Kaydet", use_container_width=True):
                 try:
                     df_up = pd.read_excel(uploaded_file, dtype={"id": str, "date": str, "bank": str, "type": str, "note": str})
                     df_up["note"] = df_up["note"].fillna("")
@@ -468,7 +533,7 @@ elif menu == "Excel Yedek / Geri Yükle":
                     
                     st.session_state.expenses = df_up.to_dict(orient="records")
                     save_expenses(st.session_state.expenses)
-                    st.success("Excel verileri başarıyla sisteme aktarıldı ve kaydedildi!")
+                    st.success("Excel verileri başarıyla sisteme aktarıldı ve GitHub'a kalıcı olarak kaydedildi!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Dosya okunurken hata oluştu: {e}")
@@ -476,5 +541,5 @@ elif menu == "Excel Yedek / Geri Yükle":
 elif menu == "Çıkış Yap":
     save_expenses(st.session_state.expenses)
     st.title("🔒 Oturum Kapatıldı")
-    st.success("Tüm verileriniz başarıyla Excel dosyasına (`giderler.xlsx`) kaydedildi. Güvenle çıkış yapabilirsiniz.")
+    st.success("Tüm verileriniz başarıyla GitHub üzerindeki `giderler.xlsx` dosyasına kaydedildi. Güvenle çıkış yapabilirsiniz.")
     st.info("Uygulamaya tekrar dönmek için sol menüden başka bir sayfa seçebilirsiniz.")
